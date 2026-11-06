@@ -336,4 +336,84 @@
         if (Date.now() - cached.time >= ttl) return null;
         return cached;
     }
+
+    // --- Mount points -------------------------------------------------------
+
+    function isVisible(el) {
+        try {
+            return !!el && el.getClientRects().length > 0;
+        } catch {
+            return false;
+        }
+    }
+
+    // Desktop: IMDb's own rating bar is present, badges go just left of it.
+    const DESKTOP_SELECTORS = [
+        '[data-testid="hero-rating-bar__aggregate-rating"]',
+    ];
+
+    // Mobile has no rating bar; try the popularity/user-rating rows, then
+    // the page title as the last visual anchor.
+    const MOBILE_SELECTORS = [
+        '[data-testid="hero-sub-nav-bar-popularity"]',
+        'a[href*="/meter/"]',
+        '[data-testid="hero-rating-bar__popularity__score"]',
+        'button[data-testid="hero-rating-bar__user-rating__unrated"]',
+        '[data-testid="hero-rating-bar__user-rating"]',
+    ];
+
+    function makeMount(anchor, type, where) {
+        const parent = anchor?.parentNode;
+        if (!anchor || !parent) return null;
+        return {
+            type,
+            anchor,
+            parent,
+            insertMethod: (p, node, a) =>
+                where === "append"
+                    ? p.appendChild(node)
+                    : p.insertBefore(node, a),
+        };
+    }
+
+    function getMountPoint() {
+        for (const selector of DESKTOP_SELECTORS) {
+            const anchor = document.querySelector(selector);
+            if (anchor && isVisible(anchor)) {
+                return makeMount(anchor, "desktop", "before");
+            }
+        }
+
+        for (const selector of MOBILE_SELECTORS) {
+            const anchor = document.querySelector(selector);
+            if (anchor && isVisible(anchor)) {
+                return makeMount(anchor, "mobile", "append");
+            }
+        }
+
+        const h1 = document.querySelector('h1[data-testid="hero__pageTitle"]');
+        if (h1 && isVisible(h1)) {
+            return makeMount(h1, "mobile", "append");
+        }
+
+        // Last resort: the element exists but is hidden (layout still
+        // settling). Attach anyway instead of doing nothing, using the
+        // aggregate-rating container to pick the layout slot.
+        for (const selector of [...DESKTOP_SELECTORS, ...MOBILE_SELECTORS]) {
+            const anchor = document.querySelector(selector);
+            if (anchor && anchor.parentNode) {
+                return makeMount(
+                    anchor,
+                    anchor.closest(
+                        '[data-testid="hero-rating-bar__aggregate-rating"]',
+                    )
+                        ? "desktop"
+                        : "mobile",
+                    "append",
+                );
+            }
+        }
+
+        return null;
+    }
 })();
