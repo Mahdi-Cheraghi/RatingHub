@@ -831,4 +831,45 @@
             });
         });
     }
+
+    // Cache-first: a fresh GM cache wins, otherwise fetch and store. Without
+    // an API key, or when the fetch fails, render with an empty ratings list
+    // (badges show "—") instead of leaving "-" placeholders.
+    async function loadRatings(id, type, ui, token) {
+        const apiKey = getApiKey();
+        const title = getTitleName();
+
+        if (!apiKey) {
+            updateUI(ui.shadow, [], title, id, type);
+            return;
+        }
+
+        try {
+            const cached = GM_getValue(RATING_CACHE_PREFIX + id, null);
+            if (
+                cached &&
+                Date.now() - cached.time < RATING_CACHE_TTL &&
+                Array.isArray(cached.ratings)
+            ) {
+                updateUI(ui.shadow, cached.ratings, title, id, type);
+                return;
+            }
+
+            const ratings = await requestRatings(id, type, apiKey);
+            if (token !== requestToken || getIMDbId() !== id) return;
+
+            GM_setValue(RATING_CACHE_PREFIX + id, {
+                time: Date.now(),
+                ratings,
+            });
+            updateUI(ui.shadow, ratings, title, id, type);
+            return;
+        } catch (error) {
+            // A newer rebuild owns this page now; let it report its own errors.
+            if (token !== requestToken) return;
+            console.error("[MDBList]", error);
+        }
+
+        updateUI(ui.shadow, [], title, id, type);
+    }
 })();
