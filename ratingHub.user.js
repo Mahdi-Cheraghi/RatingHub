@@ -742,4 +742,55 @@
             }
         }
     }
+
+    // Resolve placeholder links outside the ratings path. One in-flight
+    // resolution per service/title; the outcome is stored either way (ok
+    // page or search fallback) so later runs hit the cache instead of
+    // refetching.
+    const pendingLinks = new Set();
+
+    async function queueLinkResolution(service, title, imdbId, type) {
+        const pendingKey = `${service.id}:${imdbId}`;
+        if (pendingLinks.has(pendingKey)) return;
+        pendingLinks.add(pendingKey);
+
+        try {
+            const cached = getCachedLink(service, imdbId);
+            const result =
+                cached || (await resolveDirectLink(service, title, imdbId, type));
+
+            if (!cached) {
+                GM_setValue(LINK_CACHE_PREFIX + service.id + imdbId, {
+                    time: Date.now(),
+                    url: result.url,
+                    ok: result.ok,
+                });
+                log(
+                    "RESOLVE cached",
+                    service.id,
+                    result.url,
+                    result.ok ? "ok" : "search",
+                );
+            }
+
+            // Page navigated away mid-flight: don't touch the wrong badges.
+            if (getIMDbId() !== imdbId) return;
+
+            const item = activeUI?.shadow?.querySelector(
+                `[data-service="${service.id}"]`,
+            );
+            if (!item) return;
+
+            if (
+                result.ok &&
+                isSearchPlaceholder(service.id, item.getAttribute("href"))
+            ) {
+                item.href = result.url;
+                item.dataset.link = "direct";
+                log("RESOLVE applied", service.id, result.url);
+            }
+        } finally {
+            pendingLinks.delete(pendingKey);
+        }
+    }
 })();
