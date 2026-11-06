@@ -416,4 +416,185 @@
 
         return null;
     }
+
+    // --- UI ------------------------------------------------------------------
+
+    // Closed shadow root keeps IMDb's styles out of the badges. Each badge
+    // is an <a> pre-pointed at its best-known href (cached direct link or
+    // search page) and filled in later by updateUI.
+    function createUI(isMobile = false) {
+        const host = document.createElement("div");
+        host.id = "mdblist-inline-ratings";
+        host.dataset.mode = isMobile ? "mobile" : "desktop";
+
+        const shadow = host.attachShadow({ mode: "closed" });
+        const style = document.createElement("style");
+
+        style.textContent = `
+            :host {
+                display: inline-flex;
+                align-items: center;
+                vertical-align: middle;
+                font-family: Roboto, Helvetica, Arial, sans-serif;
+                z-index: 20;
+            }
+
+            .ratings {
+                display: flex;
+                align-items: center;
+                white-space: nowrap;
+            }
+
+            /* Desktop (above 1024px) */
+            :host([data-mode="desktop"]) .ratings {
+                gap: 16px;
+                margin-right: 12px;
+            }
+
+            :host([data-mode="desktop"]) .item {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                text-decoration: none;
+                cursor: pointer;
+                padding: 4px 6px;
+                border-radius: 6px;
+                min-height: 50px;
+                transition: background-color 0.15s ease-in-out;
+            }
+
+            :host([data-mode="desktop"]) .label {
+                font-size: 11px;
+                line-height: 14px;
+                font-weight: 600;
+                letter-spacing: 0.08em;
+                color: rgba(255, 255, 255, 0.7);
+                text-transform: uppercase;
+                margin-bottom: 3px;
+            }
+
+            :host([data-mode="desktop"]) .score-row {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                height: 28px;
+                gap: 6px;
+            }
+
+            :host([data-mode="desktop"]) .icon-wrapper {
+                width: 22px;
+                height: 22px;
+            }
+
+            :host([data-mode="desktop"]) .score-val {
+                font-size: 18px;
+                font-weight: 600;
+                color: #ffffff;
+            }
+
+            /* Mobile and below 1024px (compact row next to Popularity) */
+            :host([data-mode="mobile"]) {
+                margin-left: 12px;
+                margin-top: 2px;
+                margin-bottom: 2px;
+            }
+
+            :host([data-mode="mobile"]) .ratings {
+                gap: 10px;
+            }
+
+            :host([data-mode="mobile"]) .item {
+                display: inline-flex;
+                flex-direction: row;
+                align-items: center;
+                text-decoration: none;
+                cursor: pointer;
+                padding: 2px 4px;
+                border-radius: 4px;
+                gap: 4px;
+                transition: background-color 0.15s ease;
+            }
+
+            :host([data-mode="mobile"]) .label {
+                display: none;
+            }
+
+            :host([data-mode="mobile"]) .score-row {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+            }
+
+            :host([data-mode="mobile"]) .icon-wrapper {
+                width: 17px;
+                height: 17px;
+            }
+
+            :host([data-mode="mobile"]) .score-val {
+                font-size: 14px;
+                font-weight: 600;
+                color: #ffffff;
+            }
+
+            .item:hover {
+                background-color: rgba(255, 255, 255, 0.15);
+            }
+
+            .icon-wrapper {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+
+            .sub-val {
+                font-size: 12px;
+                color: rgba(255, 255, 255, 0.6);
+            }
+
+            .missing {
+                color: rgba(255, 255, 255, 0.35);
+                font-size: 13px;
+            }
+        `;
+
+        const wrapper = document.createElement("div");
+        wrapper.className = "ratings";
+
+        const imdbId = getIMDbId();
+        const title = getTitleName();
+
+        for (const service of services) {
+            const item = document.createElement("a");
+            item.className = "item";
+            item.dataset.service = service.id;
+            item.target = "_blank";
+            item.rel = "noopener noreferrer";
+
+            item.href = getInitialHref(service, title, imdbId);
+
+            const label = document.createElement("div");
+            label.className = "label";
+            label.textContent = service.name;
+
+            const scoreRow = document.createElement("div");
+            scoreRow.className = "score-row";
+
+            const iconSpan = document.createElement("span");
+            iconSpan.className = "icon-wrapper";
+            iconSpan.innerHTML = service.icon;
+
+            const valueSpan = document.createElement("span");
+            valueSpan.className = "score-val";
+            valueSpan.textContent = "-";
+
+            scoreRow.append(iconSpan, valueSpan);
+            item.append(label, scoreRow);
+            wrapper.append(item);
+        }
+
+        shadow.append(style, wrapper);
+        return { host, shadow };
+    }
 })();
