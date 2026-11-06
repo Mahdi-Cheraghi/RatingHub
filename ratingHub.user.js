@@ -639,4 +639,107 @@
         }
         return false;
     }
+
+    function serviceFallback(service, title, imdbId, type) {
+        if (service.id === "letterboxd") {
+            return imdbId
+                ? `https://letterboxd.com/imdb/${imdbId}/`
+                : `https://letterboxd.com/search/${encodeURIComponent(title)}/`;
+        }
+        if (service.direct === "rt") {
+            return `https://www.rottentomatoes.com/search?search=${encodeURIComponent(title)}`;
+        }
+        return `https://www.metacritic.com/search/${encodeURIComponent(title)}/?category=${type === "show" ? "2" : "13"}`;
+    }
+
+    // Fills in scores and links once ratings arrive; an empty ratings list
+    // (no API key, or the fetch failed) renders every badge as "—" and
+    // leaves the links alone.
+    function updateUI(shadow, ratings, title, imdbId, type) {
+        for (const service of services) {
+            const item = shadow.querySelector(`[data-service="${service.id}"]`);
+            if (!item) continue;
+
+            const score = item.querySelector(".score-val");
+
+            const rating = ratings.find((entry) => {
+                const source = String(entry.source || "")
+                    .toLowerCase()
+                    .replace(/[^a-z0-9]/g, "");
+                return service.aliases.some(
+                    (alias) => source === alias.replace(/[^a-z0-9]/g, ""),
+                );
+            });
+
+            const value = rating?.value ?? rating?.score;
+
+            if (
+                value === null ||
+                value === undefined ||
+                value === "" ||
+                !Number.isFinite(Number(value))
+            ) {
+                score.textContent = "—";
+                score.className = "score-val missing";
+                continue;
+            }
+
+            const cached = getCachedLink(service, imdbId);
+            let linkUrl =
+                rating?.url ||
+                (cached?.ok ? cached.url : null) ||
+                item.getAttribute("href") ||
+                serviceFallback(service, title, imdbId, type);
+
+            if (linkUrl && linkUrl.startsWith("/")) {
+                let origin;
+                if (service.id === "letterboxd") {
+                    origin = "https://letterboxd.com";
+                } else if (service.direct === "rt") {
+                    origin = "https://www.rottentomatoes.com";
+                } else {
+                    origin = `https://www.metacritic.com/${type === "show" ? "tv" : "movie"}`;
+                }
+                linkUrl = origin + linkUrl;
+            }
+
+            const isDirect =
+                Boolean(rating?.url) ||
+                !isSearchPlaceholder(service.id, linkUrl);
+
+            item.href = linkUrl;
+            item.classList.remove("disabled");
+            item.dataset.link = isDirect ? "direct" : "search";
+            log(
+                "UPDATE link",
+                service.id,
+                linkUrl,
+                item.dataset.link,
+                "val=",
+                value,
+            );
+
+            score.className = "score-val";
+            const num = Number(value);
+            const formatted = Number.isInteger(num) ? num : num.toFixed(1);
+
+            if (service.suffix.startsWith("/")) {
+                score.innerHTML = `${formatted}<span class="sub-val">${service.suffix}</span>`;
+            } else {
+                score.textContent = `${formatted}${service.suffix}`;
+            }
+
+            // A search link without a fresh ok-cached direct page means we
+            // haven't verified one yet; resolve it in the background.
+            const needsResolve =
+                !rating?.url &&
+                (!cached || !cached.ok) &&
+                isSearchPlaceholder(service.id, linkUrl) &&
+                service.direct;
+
+            if (needsResolve && imdbId) {
+                queueLinkResolution(service, title, imdbId, type);
+            }
+        }
+    }
 })();
