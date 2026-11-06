@@ -267,4 +267,19 @@
             });
         });
     }
+
+    // --- Link resolution --------------------------------------------------------
+
+    // og:title in either attribute order, with a <title> fallback.
+    function extractOgTitle(html) {
+        const match =
+            html.match(
+                /<meta\s+[^>]*property=["']og:title["'][^>]*content=["']([\s\S]*?)["']/i,
+            ) ||
+            html.match(
+                /<meta\s+[^>]*content=["']([\s\S]*?)["'][^>]*property=["']og:title["']/i,
+            ) ||
+            html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+        return match ? match[1].trim() : "";
+    }
 })();
