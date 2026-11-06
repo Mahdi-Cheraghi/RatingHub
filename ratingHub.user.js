@@ -597,4 +597,46 @@
         shadow.append(style, wrapper);
         return { host, shadow };
     }
+
+    // href before ratings arrive: cached direct link if we resolved one
+    // recently, else the site's search page for the title. Letterboxd uses
+    // the stable imdb/<id> mapping, or search when the id is unknown.
+    function getInitialHref(service, title, imdbId) {
+        if (service.id === "letterboxd") {
+            return imdbId
+                ? `https://letterboxd.com/imdb/${imdbId}/`
+                : `https://letterboxd.com/search/${encodeURIComponent(title)}/`;
+        }
+
+        const cached = imdbId ? getCachedLink(service, imdbId) : null;
+        if (cached) {
+            log(
+                "INIT cached link",
+                service.id,
+                cached.url,
+                cached.ok ? "ok" : "search",
+            );
+            return cached.url;
+        }
+
+        const searchUrl =
+            service.direct === "rt"
+                ? `https://www.rottentomatoes.com/search?search=${encodeURIComponent(title)}`
+                : `https://www.metacritic.com/search/${encodeURIComponent(title)}/?category=13`;
+        log("INIT initial link", service.id, searchUrl);
+        return searchUrl;
+    }
+
+    // True when the href is one of the search URLs above, i.e. not a real
+    // page for the title.
+    function isSearchPlaceholder(serviceId, href) {
+        if (!href) return true;
+        if (serviceId === "tomatoes" || serviceId === "popcorn") {
+            return href.startsWith("https://www.rottentomatoes.com/search");
+        }
+        if (serviceId === "metacritic") {
+            return href.startsWith("https://www.metacritic.com/search");
+        }
+        return false;
+    }
 })();
