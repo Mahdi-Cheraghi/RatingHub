@@ -172,4 +172,51 @@
         activeId = "";
         initialize(true);
     });
+
+    // --- Page info -----------------------------------------------------------
+
+    function getIMDbId() {
+        return location.pathname.match(/\/title\/(tt\d+)/)?.[1] || "";
+    }
+
+    function getTitleName() {
+        const raw = document.querySelector(
+            'h1[data-testid="hero__pageTitle"]',
+        )?.textContent;
+        return raw
+            ? raw.trim()
+            : document.title.replace(/- IMDb.*$/, "").trim();
+    }
+
+    // Movie vs. series decides which RT/Metacritic URL shape gets used.
+    // IMDb ships this as ld+json, often split across several script blocks.
+    function getMediaType() {
+        for (const script of document.querySelectorAll(
+            'script[type="application/ld+json"]',
+        )) {
+            try {
+                const data = JSON.parse(script.textContent);
+                const items = [
+                    data,
+                    ...(Array.isArray(data["@graph"]) ? data["@graph"] : []),
+                ];
+
+                for (const item of items) {
+                    const types = Array.isArray(item["@type"])
+                        ? item["@type"]
+                        : [item["@type"]];
+                    if (types.includes("Movie")) return "movie";
+                    if (
+                        types.some((type) =>
+                            ["TVSeries", "TVMiniSeries"].includes(type),
+                        )
+                    )
+                        return "show";
+                }
+            } catch {
+                // Incomplete or non-JSON block; keep scanning
+            }
+        }
+        return "movie";
+    }
 })();
