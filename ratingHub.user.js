@@ -282,4 +282,47 @@
             html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
         return match ? match[1].trim() : "";
     }
+
+    // Guess the direct RT/Metacritic page for the title, then verify it via
+    // its og:title. On any failure return a search URL instead; `ok` tells
+    // the caller which one it is, and failed guesses are cached with the
+    // short TTL in getCachedLink.
+    async function resolveDirectLink(service, title, imdbId, type) {
+        if (service.id === "letterboxd") {
+            return { url: `https://letterboxd.com/imdb/${imdbId}/`, ok: true };
+        }
+
+        try {
+            if (service.direct === "rt") {
+                const part = type === "show" ? "tv" : "m";
+                const page = `https://www.rottentomatoes.com/${part}/${slugify(title, "_")}`;
+                const html = await fetchPage(page);
+                // Strip "- Season N" so series pages still match the show.
+                const og = extractOgTitle(html).replace(/\s*-\s*Season.*$/i, "");
+                if (titlesMatch(title, og)) {
+                    return { url: page, ok: true };
+                }
+            } else if (service.direct === "mc") {
+                const part = type === "show" ? "tv" : "movie";
+                const page = `https://www.metacritic.com/${part}/${slugify(title, "-")}`;
+                const html = await fetchPage(page);
+                if (titlesMatch(title, extractOgTitle(html))) {
+                    return { url: page, ok: true };
+                }
+            }
+        } catch {
+            // Bad status, timeout or network error; use the search fallback
+        }
+
+        if (service.direct === "rt") {
+            return {
+                url: `https://www.rottentomatoes.com/search?search=${encodeURIComponent(title)}`,
+                ok: false,
+            };
+        }
+        return {
+            url: `https://www.metacritic.com/search/${encodeURIComponent(title)}/?category=${type === "show" ? "2" : "13"}`,
+            ok: false,
+        };
+    }
 })();
