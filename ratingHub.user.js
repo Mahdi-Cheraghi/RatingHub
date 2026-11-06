@@ -793,4 +793,42 @@
             pendingLinks.delete(pendingKey);
         }
     }
+
+    // --- Ratings --------------------------------------------------------------
+
+    // MDBList ratings for one title. Rejects on non-200, unexpected shape
+    // or unparseable JSON; loadRatings turns rejections into the empty state.
+    function requestRatings(id, type, apiKey) {
+        const url = new URL(`${API_BASE}/imdb/${type}/${id}/`);
+        url.searchParams.set("apikey", apiKey);
+
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: url.href,
+                timeout: 15000,
+                headers: { Accept: "application/json" },
+                onload(response) {
+                    if (response.status !== 200) {
+                        reject(new Error(`MDBList HTTP ${response.status}`));
+                        return;
+                    }
+                    try {
+                        const data = JSON.parse(response.responseText);
+                        if (!Array.isArray(data.ratings)) {
+                            reject(
+                                new Error("Unexpected API response structure."),
+                            );
+                            return;
+                        }
+                        resolve(data.ratings);
+                    } catch {
+                        reject(new Error("Invalid JSON response."));
+                    }
+                },
+                onerror: () => reject(new Error("Network error.")),
+                ontimeout: () => reject(new Error("Request timeout.")),
+            });
+        });
+    }
 })();
