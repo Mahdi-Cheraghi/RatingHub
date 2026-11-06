@@ -145,4 +145,31 @@
             direct: null,
         },
     ];
+
+    // --- API key -----------------------------------------------------------
+
+    function getApiKey() {
+        return GM_getValue(API_KEY_STORAGE, "").trim();
+    }
+
+    function configureApiKey() {
+        const answer = prompt("Enter your MDBList API Key:", getApiKey());
+        if (answer === null) return;
+
+        const key = answer.trim();
+        if (key && (key.length > 512 || /\s/.test(key))) {
+            alert("Invalid API key format.");
+            return;
+        }
+
+        GM_setValue(API_KEY_STORAGE, key);
+        activeId = ""; // force a rebuild so the new key takes effect
+        initialize(true);
+    }
+
+    GM_registerMenuCommand("Set MDBList API Key", configureApiKey);
+    GM_registerMenuCommand("Refresh Ratings", () => {
+        activeId = "";
+        initialize(true);
+    });
 })();
