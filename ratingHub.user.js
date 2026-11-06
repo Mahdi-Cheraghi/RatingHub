@@ -243,4 +243,28 @@
             .replace(/[^a-z0-9]+/g, separator)
             .replace(new RegExp(`^\\${separator}+|\\${separator}+$`, "g"), "");
     }
+
+    // --- Networking -----------------------------------------------------------
+
+    // Cross-origin page fetch through the userscript sandbox; used to verify
+    // guessed RT/Metacritic URLs before we link to them.
+    function fetchPage(url) {
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: "GET",
+                url,
+                timeout: 12000,
+                headers: { Accept: "text/html" },
+                onload(response) {
+                    if (response.status === 200 && response.responseText) {
+                        resolve(response.responseText);
+                    } else {
+                        reject(new Error(`HTTP ${response.status}`));
+                    }
+                },
+                onerror: () => reject(new Error("Network error.")),
+                ontimeout: () => reject(new Error("Request timeout.")),
+            });
+        });
+    }
 })();
