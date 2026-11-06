@@ -219,4 +219,28 @@
         }
         return "movie";
     }
+
+    // --- Text helpers --------------------------------------------------------
+
+    const norm = (s) =>
+        String(s || "")
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, "");
+
+    // Substring-tolerant on purpose: fetched pages decorate titles with
+    // extra bits (years, network names) that shouldn't break the match.
+    function titlesMatch(ours, page) {
+        const a = norm(ours);
+        const b = norm(page);
+        if (!a || !b) return false;
+        return a === b || b.startsWith(a) || a.startsWith(b);
+    }
+
+    function slugify(title, separator) {
+        return String(title || "")
+            .toLowerCase()
+            .replace(/['’]/g, "")
+            .replace(/[^a-z0-9]+/g, separator)
+            .replace(new RegExp(`^\\${separator}+|\\${separator}+$`, "g"), "");
+    }
 })();
