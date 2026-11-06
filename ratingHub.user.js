@@ -872,4 +872,82 @@
 
         updateUI(ui.shadow, [], title, id, type);
     }
+
+    // --- Lifecycle --------------------------------------------------------------
+
+    // (Re)build the UI when needed. Called from the observer, the resize
+    // handler and the menu commands. The cheap exit keeps IMDb's continuous
+    // hero mutations from triggering rebuilds when nothing has changed.
+    function initialize(force = false) {
+        const id = getIMDbId();
+        if (!id) return;
+
+        const mount = getMountPoint();
+        if (!mount) return;
+
+        const existing = document.getElementById("mdblist-inline-ratings");
+
+        if (
+            !force &&
+            activeId === id &&
+            existing &&
+            activeMountType === mount.type
+        ) {
+            // Nothing to do while the host is visible, or while the anchor
+            // itself is hidden (IMDb tears down the hero bar mid-navigation).
+            if (isVisible(existing) || !isVisible(mount.anchor)) {
+                return;
+            }
+        }
+
+        activeMountType = mount.type;
+        const type = getMediaType();
+        activeId = id;
+        requestToken++;
+        const token = requestToken;
+
+        existing?.remove();
+
+        const ui = createUI(mount.type === "mobile");
+        activeUI = ui;
+        mount.insertMethod(mount.parent, ui.host, mount.anchor);
+
+        loadRatings(id, type, ui, token);
+    }
+
+    function startObserver() {
+        // Re-init only on real changes: new title, detached host, or a
+        // desktop/mobile swap. Everything else is left alone.
+        observer?.disconnect();
+        observer = new MutationObserver(() => {
+            const id = getIMDbId();
+            if (!id) return;
+
+            const existing = document.getElementById("mdblist-inline-ratings");
+            const mount = getMountPoint();
+
+            if (
+                id !== activeId ||
+                !existing ||
+                (mount && activeMountType !== mount.type)
+            ) {
+                initialize();
+            }
+        });
+
+        observer.observe(document.documentElement, {
+            childList: true,
+            subtree: true,
+        });
+
+        // Debounced resize: IMDb switches layouts at ~1024px, and the badge
+        // slot differs between them.
+        window.addEventListener("resize", () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => initialize(), 250);
+        });
+    }
+
+    initialize();
+    startObserver();
 })();
