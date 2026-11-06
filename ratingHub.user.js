@@ -325,4 +325,15 @@
             ok: false,
         };
     }
+
+    function getCachedLink(service, imdbId) {
+        const cached = GM_getValue(
+            LINK_CACHE_PREFIX + service.id + imdbId,
+            null,
+        );
+        if (!cached || typeof cached.url !== "string") return null;
+        const ttl = cached.ok ? LINK_TTL_OK : LINK_TTL_FAIL;
+        if (Date.now() - cached.time >= ttl) return null;
+        return cached;
+    }
 })();
