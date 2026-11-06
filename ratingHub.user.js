@@ -102,4 +102,47 @@
             </svg>
         `,
     };
+
+    // Badge definitions. `aliases` covers the spellings the MDBList API uses
+    // for the same source; `direct` marks services whose page link can be
+    // resolved locally (null = fixed letterboxd imdb link, see resolver).
+    const services = [
+        {
+            id: "tomatoes",
+            name: "TOMATO",
+            aliases: ["rtomatoes", "rottentomatoes", "tomatoes", "rt"],
+            suffix: "%",
+            icon: ICONS.tomatoes,
+            direct: "rt",
+        },
+        {
+            id: "popcorn",
+            name: "POPCORN",
+            aliases: [
+                "rtaudience",
+                "popcorn",
+                "popcornmeter",
+                "tomatoesaudience",
+            ],
+            suffix: "%",
+            icon: ICONS.popcorn,
+            direct: "rt",
+        },
+        {
+            id: "metacritic",
+            name: "META",
+            aliases: ["metacritic", "metascore", "mc"],
+            suffix: "",
+            icon: ICONS.metacritic,
+            direct: "mc",
+        },
+        {
+            id: "letterboxd",
+            name: "LETTER",
+            aliases: ["letterrating", "letterboxd", "letter", "lb"],
+            suffix: "/5",
+            icon: ICONS.letterboxd,
+            direct: null,
+        },
+    ];
 })();
