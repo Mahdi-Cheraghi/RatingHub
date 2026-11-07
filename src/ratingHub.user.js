@@ -2,12 +2,12 @@
 // @name          RatingHub
 // @namespace     https://github.com/Mahdi-Cheraghi/RatingHub
 // @version       1.0.4
-// @description   Show RT / Metacritic / Letterboxd ratings next to IMDb's rating
+// @description   Display Rotten Tomatoes, Metacritic, and Letterboxd ratings alongside IMDb ratings.
 // @author        Mahdi Cheraghi
 // @license       MIT
 // @homepageURL   https://github.com/Mahdi-Cheraghi/RatingHub
-// @supportURl    https://github.com/Mahdi-Cheraghi/RatingHub/issues
-// @icon
+// @supportURL    https://github.com/Mahdi-Cheraghi/RatingHub/issues
+// @icon          https://raw.githubusercontent.com/Mahdi-Cheraghi/RatingHub/main/assets/logo/128x128/logo.png
 //
 // @match         https://www.imdb.com/title/*
 // @run-at        document-idle
