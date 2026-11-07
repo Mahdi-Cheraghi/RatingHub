@@ -45,7 +45,7 @@ RatingHub brings ratings from multiple trusted platforms directly to IMDb title 
 
 ## Installation
 
-1. Install [RatingHub from Greasy Fork](GREASY_FORK_SCRIPT_URL).
+1. Install [RatingHub from Greasy Fork](https://greasyfork.org/en/scripts/604262-ratinghub).
 2. Open an IMDb movie or TV show page
 3. Open the Tampermonkey menu
 4. Select **Set MDBList API Key**
