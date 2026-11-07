@@ -1,39 +1,50 @@
 // ==UserScript==
 // @name          RatingHub
-// @namespace     local.imdb.mdblist
+// @namespace     https://github.com/Mahdi-Cheraghi/RatingHub
 // @version       1.0.4
-// @description   Display external ratings inline with IMDb rating
+// @description   Show RT / Metacritic / Letterboxd ratings next to IMDb's rating
+// @author        Mahdi Cheraghi
+// @license       MIT
+// @homepageURL   https://github.com/Mahdi-Cheraghi/RatingHub
+// @supportURl    https://github.com/Mahdi-Cheraghi/RatingHub/issues
+// @icon
+//
 // @match         https://www.imdb.com/title/*
 // @run-at        document-idle
+//
 // @grant         GM_getValue
 // @grant         GM_setValue
 // @grant         GM_registerMenuCommand
 // @grant         GM_xmlhttpRequest
+//
 // @connect       api.mdblist.com
 // @connect       www.rottentomatoes.com
 // @connect       www.metacritic.com
+// @connect       www.letterboxd.com
 // ==/UserScript==
 
-/*
+/**
  * RatingHub
  *
- * Shows Rotten Tomatoes (critic + audience), Metacritic and Letterboxd
- * ratings next to IMDb's own rating on title pages. Scores come from
- * MDBList, so an API key is required (Tampermonkey menu -> "Set MDBList
- * API Key").
+ * Displays external movie and TV ratings alongside IMDb's native rating,
+ * including Rotten Tomatoes (Tomatometer and Audience Score),
+ * Metacritic, and Letterboxd.
  *
- * Direct RT/Metacritic links are resolved by fetching the guessed page and
- * verifying it against its og:title; verified links are cached for a day,
- * while search fallbacks only stick for an hour so misses get retried.
+ * All rating data is retrieved through the MDBList API.
+ * An MDBList API key is required and can be configured through
+ * the Tampermonkey menu.
+ *
+ * External rating links are resolved and validated against the
+ * corresponding page metadata before being displayed.
+ *
+ * Verified links are cached for 24 hours, while search fallback
+ * results are cached for 1 hour to allow unsuccessful lookups
+ * to be retried.
  */
 
 (() => {
     "use strict";
 
-    // MDBList API base and GM storage layout: ratings cached per title,
-    // plus a per-service cache for resolved direct links. Failed lookups
-    // only stick an hour so a temporary RT/Metacritic hiccup doesn't pin
-    // the badge to its search link for a whole day.
     const API_BASE = "https://api.mdblist.com";
     const API_KEY_STORAGE = "mdblist_api_key";
 
@@ -45,21 +56,11 @@
     const LINK_TTL_FAIL = 1 * 60 * 60 * 1000;
 
     const DEBUG = true;
-
-    // IMDb id currently rendered by the mounted UI, and which layout slot
-    // ('desktop' or 'mobile') it was built for.
     let activeId = "";
     let activeMountType = "";
-
     let observer = null;
     let resizeTimer = 0;
-
-    // Bumped on every rebuild; async responses compare against it so a slow
-    // reply for a title we already navigated away from never repaints.
     let requestToken = 0;
-
-    // The shadow root is closed, so this reference is the only way back into
-    // it once the host is in the document (link resolution needs it).
     let activeUI = null;
 
     function log(...args) {
@@ -103,9 +104,6 @@
         `,
     };
 
-    // Badge definitions. `aliases` covers the spellings the MDBList API uses
-    // for the same source; `direct` marks services whose page link can be
-    // resolved locally (null = fixed letterboxd imdb link, see resolver).
     const services = [
         {
             id: "tomatoes",
@@ -146,7 +144,7 @@
         },
     ];
 
-    // --- API key -----------------------------------------------------------
+    // --- API key ---
 
     function getApiKey() {
         return GM_getValue(API_KEY_STORAGE, "").trim();
@@ -173,7 +171,7 @@
         initialize(true);
     });
 
-    // --- Page info -----------------------------------------------------------
+    // --- Page info ---
 
     function getIMDbId() {
         return location.pathname.match(/\/title\/(tt\d+)/)?.[1] || "";
@@ -189,7 +187,6 @@
     }
 
     // Movie vs. series decides which RT/Metacritic URL shape gets used.
-    // IMDb ships this as ld+json, often split across several script blocks.
     function getMediaType() {
         for (const script of document.querySelectorAll(
             'script[type="application/ld+json"]',
@@ -214,21 +211,20 @@
                         return "show";
                 }
             } catch {
-                // Incomplete or non-JSON block; keep scanning
+                // bad or partial JSON block, just keep scanning
             }
         }
         return "movie";
     }
 
-    // --- Text helpers --------------------------------------------------------
+    // --- Text helpers ---
 
     const norm = (s) =>
         String(s || "")
             .toLowerCase()
             .replace(/[^a-z0-9]/g, "");
 
-    // Substring-tolerant on purpose: fetched pages decorate titles with
-    // extra bits (years, network names) that shouldn't break the match.
+    // pages add junk to titles (years, networks) — that shouldn't break the match.
     function titlesMatch(ours, page) {
         const a = norm(ours);
         const b = norm(page);
@@ -244,9 +240,9 @@
             .replace(new RegExp(`^\\${separator}+|\\${separator}+$`, "g"), "");
     }
 
-    // --- Networking -----------------------------------------------------------
+    // --- Networking ---
 
-    // Cross-origin page fetch through the userscript sandbox; used to verify
+    // fetch a cross-origin page via the userscript sandbox — used to verify
     // guessed RT/Metacritic URLs before we link to them.
     function fetchPage(url) {
         return new Promise((resolve, reject) => {
@@ -268,9 +264,8 @@
         });
     }
 
-    // --- Link resolution --------------------------------------------------------
+    // --- Link resolution ---
 
-    // og:title in either attribute order, with a <title> fallback.
     function extractOgTitle(html) {
         const match =
             html.match(
@@ -283,10 +278,8 @@
         return match ? match[1].trim() : "";
     }
 
-    // Guess the direct RT/Metacritic page for the title, then verify it via
-    // its og:title. On any failure return a search URL instead; `ok` tells
-    // the caller which one it is, and failed guesses are cached with the
-    // short TTL in getCachedLink.
+    // guess direct RT/Metacritic page → verify og:title. on failure, search
+    // URL instead (`ok` tells which). failed guesses cached with short TTL.
     async function resolveDirectLink(service, title, imdbId, type) {
         if (service.id === "letterboxd") {
             return { url: `https://letterboxd.com/imdb/${imdbId}/`, ok: true };
@@ -297,8 +290,10 @@
                 const part = type === "show" ? "tv" : "m";
                 const page = `https://www.rottentomatoes.com/${part}/${slugify(title, "_")}`;
                 const html = await fetchPage(page);
-                // Strip "- Season N" so series pages still match the show.
-                const og = extractOgTitle(html).replace(/\s*-\s*Season.*$/i, "");
+                const og = extractOgTitle(html).replace(
+                    /\s*-\s*Season.*$/i,
+                    "",
+                );
                 if (titlesMatch(title, og)) {
                     return { url: page, ok: true };
                 }
@@ -311,7 +306,7 @@
                 }
             }
         } catch {
-            // Bad status, timeout or network error; use the search fallback
+            // whatever went wrong, fall back to search
         }
 
         if (service.direct === "rt") {
@@ -337,7 +332,7 @@
         return cached;
     }
 
-    // --- Mount points -------------------------------------------------------
+    // --- Mount points ---
 
     function isVisible(el) {
         try {
@@ -347,13 +342,11 @@
         }
     }
 
-    // Desktop: IMDb's own rating bar is present, badges go just left of it.
     const DESKTOP_SELECTORS = [
         '[data-testid="hero-rating-bar__aggregate-rating"]',
     ];
 
-    // Mobile has no rating bar; try the popularity/user-rating rows, then
-    // the page title as the last visual anchor.
+    // mobile has no rating bar, so use the popularity rows (or the title as a last resort) as the anchor.
     const MOBILE_SELECTORS = [
         '[data-testid="hero-sub-nav-bar-popularity"]',
         'a[href*="/meter/"]',
@@ -396,9 +389,6 @@
             return makeMount(h1, "mobile", "append");
         }
 
-        // Last resort: the element exists but is hidden (layout still
-        // settling). Attach anyway instead of doing nothing, using the
-        // aggregate-rating container to pick the layout slot.
         for (const selector of [...DESKTOP_SELECTORS, ...MOBILE_SELECTORS]) {
             const anchor = document.querySelector(selector);
             if (anchor && anchor.parentNode) {
@@ -417,11 +407,9 @@
         return null;
     }
 
-    // --- UI ------------------------------------------------------------------
+    // --- UI ---
 
-    // Closed shadow root keeps IMDb's styles out of the badges. Each badge
-    // is an <a> pre-pointed at its best-known href (cached direct link or
-    // search page) and filled in later by updateUI.
+    // closed shadow root isolates badges from IMDb CSS.
     function createUI(isMobile = false) {
         const host = document.createElement("div");
         host.id = "mdblist-inline-ratings";
@@ -598,9 +586,7 @@
         return { host, shadow };
     }
 
-    // href before ratings arrive: cached direct link if we resolved one
-    // recently, else the site's search page for the title. Letterboxd uses
-    // the stable imdb/<id> mapping, or search when the id is unknown.
+    // pre-ratings href: fresh cached link, else the site's search page.
     function getInitialHref(service, title, imdbId) {
         if (service.id === "letterboxd") {
             return imdbId
@@ -627,8 +613,7 @@
         return searchUrl;
     }
 
-    // True when the href is one of the search URLs above, i.e. not a real
-    // page for the title.
+    // search link, not a real page.
     function isSearchPlaceholder(serviceId, href) {
         if (!href) return true;
         if (serviceId === "tomatoes" || serviceId === "popcorn") {
@@ -652,9 +637,7 @@
         return `https://www.metacritic.com/search/${encodeURIComponent(title)}/?category=${type === "show" ? "2" : "13"}`;
     }
 
-    // Fills in scores and links once ratings arrive; an empty ratings list
-    // (no API key, or the fetch failed) renders every badge as "—" and
-    // leaves the links alone.
+    // apply ratings once they arrive.
     function updateUI(shadow, ratings, title, imdbId, type) {
         for (const service of services) {
             const item = shadow.querySelector(`[data-service="${service.id}"]`);
@@ -729,8 +712,7 @@
                 score.textContent = `${formatted}${service.suffix}`;
             }
 
-            // A search link without a fresh ok-cached direct page means we
-            // haven't verified one yet; resolve it in the background.
+            // search link with no verified direct page yet — resolve in background.
             const needsResolve =
                 !rating?.url &&
                 (!cached || !cached.ok) &&
@@ -743,10 +725,8 @@
         }
     }
 
-    // Resolve placeholder links outside the ratings path. One in-flight
-    // resolution per service/title; the outcome is stored either way (ok
-    // page or search fallback) so later runs hit the cache instead of
-    // refetching.
+    // resolve placeholder links separately. one lookup per service/title,
+    // result cached either way (page or search fallback).
     const pendingLinks = new Set();
 
     async function queueLinkResolution(service, title, imdbId, type) {
@@ -757,7 +737,8 @@
         try {
             const cached = getCachedLink(service, imdbId);
             const result =
-                cached || (await resolveDirectLink(service, title, imdbId, type));
+                cached ||
+                (await resolveDirectLink(service, title, imdbId, type));
 
             if (!cached) {
                 GM_setValue(LINK_CACHE_PREFIX + service.id + imdbId, {
@@ -773,7 +754,7 @@
                 );
             }
 
-            // Page navigated away mid-flight: don't touch the wrong badges.
+            // stale request after navigation, skip
             if (getIMDbId() !== imdbId) return;
 
             const item = activeUI?.shadow?.querySelector(
@@ -794,10 +775,7 @@
         }
     }
 
-    // --- Ratings --------------------------------------------------------------
-
-    // MDBList ratings for one title. Rejects on non-200, unexpected shape
-    // or unparseable JSON; loadRatings turns rejections into the empty state.
+    // get ratings for a single title from MDBList.
     function requestRatings(id, type, apiKey) {
         const url = new URL(`${API_BASE}/imdb/${type}/${id}/`);
         url.searchParams.set("apikey", apiKey);
@@ -832,9 +810,7 @@
         });
     }
 
-    // Cache-first: a fresh GM cache wins, otherwise fetch and store. Without
-    // an API key, or when the fetch fails, render with an empty ratings list
-    // (badges show "—") instead of leaving "-" placeholders.
+    // cache-first. falls back to empty ratings on miss/no-key/error.
     async function loadRatings(id, type, ui, token) {
         const apiKey = getApiKey();
         const title = getTitleName();
@@ -865,7 +841,6 @@
             updateUI(ui.shadow, ratings, title, id, type);
             return;
         } catch (error) {
-            // A newer rebuild owns this page now; let it report its own errors.
             if (token !== requestToken) return;
             console.error("[MDBList]", error);
         }
@@ -873,11 +848,6 @@
         updateUI(ui.shadow, [], title, id, type);
     }
 
-    // --- Lifecycle --------------------------------------------------------------
-
-    // (Re)build the UI when needed. Called from the observer, the resize
-    // handler and the menu commands. The cheap exit keeps IMDb's continuous
-    // hero mutations from triggering rebuilds when nothing has changed.
     function initialize(force = false) {
         const id = getIMDbId();
         if (!id) return;
@@ -893,8 +863,6 @@
             existing &&
             activeMountType === mount.type
         ) {
-            // Nothing to do while the host is visible, or while the anchor
-            // itself is hidden (IMDb tears down the hero bar mid-navigation).
             if (isVisible(existing) || !isVisible(mount.anchor)) {
                 return;
             }
@@ -916,8 +884,6 @@
     }
 
     function startObserver() {
-        // Re-init only on real changes: new title, detached host, or a
-        // desktop/mobile swap. Everything else is left alone.
         observer?.disconnect();
         observer = new MutationObserver(() => {
             const id = getIMDbId();
@@ -940,8 +906,7 @@
             subtree: true,
         });
 
-        // Debounced resize: IMDb switches layouts at ~1024px, and the badge
-        // slot differs between them.
+        // Debounced resize: IMDb switches layouts at ~1024px
         window.addEventListener("resize", () => {
             clearTimeout(resizeTimer);
             resizeTimer = setTimeout(() => initialize(), 250);
